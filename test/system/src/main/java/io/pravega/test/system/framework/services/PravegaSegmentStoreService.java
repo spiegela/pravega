@@ -136,7 +136,7 @@ public class PravegaSegmentStoreService extends MarathonBasedService {
                 setSystemProperty("autoScale.cacheExpiryInSeconds", "120") +
                 setSystemProperty("autoScale.cacheCleanUpInSeconds", "120") +
                 setSystemProperty("autoScale.controllerUri", conUri.toString()) +
-                setSystemProperty("log.level", "DEBUG");
+                setSystemProperty("log.level", "TRACE");
 
         Map<String, String> map = new HashMap<>();
         map.put("PRAVEGA_SEGMENTSTORE_OPTS", hostSystemProperties);
