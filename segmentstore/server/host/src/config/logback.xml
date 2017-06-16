@@ -36,7 +36,7 @@ You may obtain a copy of the License at
         </encoder>
     </appender>
 
-    <root level="${log.level:-INFO}">
+    <root level="TRACE">
         <appender-ref ref="consoleAppender"/>
         <appender-ref ref="FILE"/>
     </root>
