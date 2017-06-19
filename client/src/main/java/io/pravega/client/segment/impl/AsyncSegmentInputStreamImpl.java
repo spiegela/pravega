@@ -57,22 +57,26 @@ class AsyncSegmentInputStreamImpl extends AsyncSegmentInputStream {
 
         @Override
         public void connectionDropped() {
+            log.trace("ConnectionDropped ");
             closeConnection(new ConnectionFailedException());
         }
 
         @Override
         public void wrongHost(WireCommands.WrongHost wrongHost) {
+            log.trace("Wrong Host {}", wrongHost);
             closeConnection(new ConnectionFailedException(wrongHost.toString()));
         }
 
         @Override
         public void noSuchSegment(WireCommands.NoSuchSegment noSuchSegment) {
             //TODO: It's not clear how we should be handling this case. (It should be impossible...)
+            log.trace("NoSuchSegment {}", noSuchSegment);
             closeConnection(new IllegalArgumentException(noSuchSegment.toString()));
         }
         
         @Override
         public void segmentIsSealed(WireCommands.SegmentIsSealed segmentIsSealed) {
+            log.trace("SegmentIsSealed {}", segmentIsSealed);
             checkSegment(segmentIsSealed.getSegment());
             ReadFutureImpl future;
             synchronized (lock) {
