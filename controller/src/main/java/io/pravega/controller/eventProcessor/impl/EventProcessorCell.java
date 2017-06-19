@@ -103,7 +103,7 @@ class EventProcessorCell<T extends ControllerEvent> {
                         // possibly persist event position
                         state.store(event.getPosition());
                     } else {
-                        log.trace("Event read is null");
+                        log.trace("Event read is null for eventProcessor {}, state={}", objectId, state());
                     }
                 } catch (Exception e) {
                     handleException(e);
