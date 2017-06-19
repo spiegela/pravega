@@ -100,6 +100,7 @@ public class EventStreamReaderImpl<Type> implements EventStreamReader<Type> {
             } while (buffer == null && timer.getElapsedMillis() < timeout);
             
             if (buffer == null) {
+               log.trace("No event read, creating emptyEvent");
                return createEmptyEvent(null);
             } 
             lastRead = Sequence.create(segment.getSegmentNumber(), offset);
