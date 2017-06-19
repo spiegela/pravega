@@ -19,13 +19,11 @@ import java.nio.ByteBuffer;
 
 import io.pravega.client.stream.Serializer;
 import lombok.EqualsAndHashCode;
-import lombok.extern.slf4j.Slf4j;
 
 /**
  * An implementation of {@link Serializer} that uses Java serialization.
  */
 @EqualsAndHashCode
-@Slf4j
 public class JavaSerializer<T extends Serializable> implements Serializer<T>, Serializable {
 
     @Override
@@ -52,10 +50,7 @@ public class JavaSerializer<T extends Serializable> implements Serializer<T>, Se
         ObjectInputStream oin;
         try {
             oin = new ObjectInputStream(bin);
-
-            final T readObj = (T) oin.readObject();
-            log.trace("Object Read :{}", readObj);
-            return readObj;
+            return (T) oin.readObject();
         } catch (IOException | ClassNotFoundException e) {
             throw new RuntimeException(e);
         }
