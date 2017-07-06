@@ -51,6 +51,7 @@ import static javax.ws.rs.core.Response.Status.NO_CONTENT;
 import static javax.ws.rs.core.Response.Status.OK;
 import static org.junit.Assert.assertEquals;
 
+@Ignore
 @Slf4j
 @RunWith(SystemTestRunner.class)
 public class ControllerRestApiTest {

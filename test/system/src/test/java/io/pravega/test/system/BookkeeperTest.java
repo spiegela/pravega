@@ -22,6 +22,7 @@ import java.net.URI;
 import java.util.List;
 import static org.junit.Assert.assertEquals;
 
+@Ignore
 @Slf4j
 @RunWith(SystemTestRunner.class)
 public class BookkeeperTest {

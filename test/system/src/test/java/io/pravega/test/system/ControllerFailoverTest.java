@@ -41,6 +41,7 @@ import org.junit.runner.RunWith;
 /**
  * Controller fail over system test.
  */
+@Ignore
 @Slf4j
 @RunWith(SystemTestRunner.class)
 public class ControllerFailoverTest {
