@@ -53,6 +53,7 @@ import lombok.extern.slf4j.Slf4j;
 import mesosphere.marathon.client.utils.MarathonException;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
