@@ -7,13 +7,15 @@
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
-package io.pravega.controller.store.stream.tables;
+package io.pravega.controller.store.stream;
 
-import io.pravega.client.stream.StreamConfiguration;
 import lombok.Data;
 
+import java.util.List;
+
 @Data
-public class Create {
-    private final long creationTime;
-    private final StreamConfiguration configuration;
+public class DeleteEpochResponse {
+    private final boolean deleted;
+    private final List<Integer> segmentsSealed;
+    private final List<Segment> segmentsCreated;
 }

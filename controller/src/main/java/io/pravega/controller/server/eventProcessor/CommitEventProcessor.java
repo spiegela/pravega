@@ -10,7 +10,8 @@
 package io.pravega.controller.server.eventProcessor;
 
 import com.google.common.annotations.VisibleForTesting;
-import io.pravega.client.stream.AckFuture;
+import io.pravega.client.netty.impl.ConnectionFactory;
+import io.pravega.client.stream.Position;
 import io.pravega.common.ExceptionHelpers;
 import io.pravega.common.concurrent.FutureHelpers;
 import io.pravega.common.util.Retry;
@@ -20,8 +21,7 @@ import io.pravega.controller.store.host.HostControllerStore;
 import io.pravega.controller.store.stream.OperationContext;
 import io.pravega.controller.store.stream.StreamMetadataStore;
 import io.pravega.controller.stream.api.grpc.v1.Controller;
-import io.pravega.client.netty.impl.ConnectionFactory;
-import io.pravega.client.stream.Position;
+import io.pravega.controller.task.Stream.StreamMetadataTasks;
 import io.pravega.controller.task.Stream.WriteFailedException;
 import lombok.extern.slf4j.Slf4j;
 
@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
@@ -43,6 +42,7 @@ import java.util.stream.Collectors;
 public class CommitEventProcessor extends EventProcessor<CommitEvent> {
 
     private final StreamMetadataStore streamMetadataStore;
+    private final StreamMetadataTasks streamMetadataTasks;
     private final HostControllerStore hostControllerStore;
     private final ConnectionFactory connectionFactory;
     private final ScheduledExecutorService executor;
@@ -51,12 +51,14 @@ public class CommitEventProcessor extends EventProcessor<CommitEvent> {
 
     @VisibleForTesting
     public CommitEventProcessor(final StreamMetadataStore streamMetadataStore,
+                                final StreamMetadataTasks streamMetadataTasks,
                                 final HostControllerStore hostControllerStore,
                                 final ScheduledExecutorService executor,
                                 final SegmentHelper segmentHelper,
                                 final ConnectionFactory connectionFactory,
                                 final BlockingQueue<CommitEvent> queue) {
         this.streamMetadataStore = streamMetadataStore;
+        this.streamMetadataTasks = streamMetadataTasks;
         this.hostControllerStore = hostControllerStore;
         this.segmentHelper = segmentHelper;
         this.executor = executor;
@@ -65,11 +67,13 @@ public class CommitEventProcessor extends EventProcessor<CommitEvent> {
     }
 
     public CommitEventProcessor(final StreamMetadataStore streamMetadataStore,
+                                final StreamMetadataTasks streamMetadataTasks,
                                 final HostControllerStore hostControllerStore,
                                 final ScheduledExecutorService executor,
                                 final SegmentHelper segmentHelper,
                                 final ConnectionFactory connectionFactory) {
         this.streamMetadataStore = streamMetadataStore;
+        this.streamMetadataTasks = streamMetadataTasks;
         this.hostControllerStore = hostControllerStore;
         this.segmentHelper = segmentHelper;
         this.executor = executor;
@@ -87,14 +91,14 @@ public class CommitEventProcessor extends EventProcessor<CommitEvent> {
         log.debug("Committing transaction {} on stream {}/{}", event.getTxid(), event.getScope(), event.getStream());
 
         streamMetadataStore.getActiveEpoch(scope, stream, context, executor).thenComposeAsync(pair -> {
-            List<Integer> segments = pair.getValue();
-            int activeEpoch = pair.getKey();
             // Note, transaction's epoch either equals stream's current epoch or is one more than it,
             // because stream scale operation ensures that all transactions in current epoch are
             // complete before transitioning the stream to new epoch.
-            if (activeEpoch == epoch) {
+            if (epoch < pair.getKey()) {
+                return CompletableFuture.completedFuture(null);
+            } else if (epoch == pair.getKey()) {
                 // If the transaction's epoch is same as the stream's current epoch, commit it.
-                return completeCommit(scope, stream, epoch, segments, txnId, context);
+                return completeCommit(scope, stream, epoch, txnId, context);
             } else {
                 // Otherwise, postpone commit operation until the stream transitions to next epoch.
                 return postponeCommitEvent(event);
@@ -114,12 +118,13 @@ public class CommitEventProcessor extends EventProcessor<CommitEvent> {
     private CompletableFuture<Void> completeCommit(final String scope,
                                                    final String stream,
                                                    final int epoch,
-                                                   final List<Integer> segments,
                                                    final UUID txnId,
                                                    final OperationContext context) {
-        return notifyCommitToHost(scope, stream, segments, txnId).thenComposeAsync(x ->
-                streamMetadataStore.commitTransaction(scope, stream, epoch, txnId, context, executor), executor)
-                .thenApply(x -> null);
+        return streamMetadataStore.getActiveSegmentIds(scope, stream, epoch, context, executor)
+                .thenComposeAsync(segments -> notifyCommitToHost(scope, stream, segments, txnId).thenComposeAsync(x ->
+                        streamMetadataStore.commitTransaction(scope, stream, epoch, txnId, context, executor), executor)
+                        .thenApply(x -> null))
+                .thenCompose(x -> FutureHelpers.toVoid(streamMetadataTasks.tryCompleteScale(scope, stream, epoch, context)));
     }
 
     private CompletableFuture<Void> postponeCommitEvent(CommitEvent event) {
@@ -130,19 +135,11 @@ public class CommitEventProcessor extends EventProcessor<CommitEvent> {
     private CompletableFuture<Void> writeEvent(CommitEvent event) {
         UUID txnId = event.getTxid();
         log.debug("Transaction {}, pushing back CommitEvent to commitStream", txnId);
-        AckFuture future = this.getSelfWriter().write(event);
-        CompletableFuture<AckFuture> writeComplete = new CompletableFuture<>();
-        future.addListener(() -> writeComplete.complete(future), executor);
-        return writeComplete.thenApplyAsync(ackFuture -> {
-            try {
-                // ackFuture is complete by now, so we can do a get without blocking
-                ackFuture.get();
+        return this.getSelfWriter().write(event).handleAsync((v, e) -> {
+            if (e != null) {
                 log.debug("Transaction {}, sent request to commitStream", txnId);
                 return null;
-            } catch (InterruptedException e) {
-                log.warn("Transaction {}, unexpected interruption sending event to commitStream. Retrying...", txnId);
-                throw new WriteFailedException(e);
-            } catch (ExecutionException e) {
+            } else {
                 Throwable realException = ExceptionHelpers.getRealException(e);
                 log.warn("Transaction {}, failed sending event to commitStream. Retrying...", txnId);
                 throw new WriteFailedException(realException);
