@@ -82,7 +82,13 @@ public final class EventProcessorGroupImpl<T extends ControllerEvent> extends Ab
 
     void initialize() throws CheckpointStoreException {
 
-        checkpointStore.addReaderGroup(actorSystem.getProcess(), eventProcessorConfig.getConfig().getReaderGroupName());
+        try {
+            checkpointStore.addReaderGroup(actorSystem.getProcess(), eventProcessorConfig.getConfig().getReaderGroupName());
+        } catch (CheckpointStoreException e) {
+            if (!e.getType().equals(CheckpointStoreException.Type.NodeExists)) {
+                throw e;
+            }
+        }
 
         // Continue creating reader group if adding reader group to checkpoint store succeeds.
 
@@ -210,7 +216,7 @@ public final class EventProcessorGroupImpl<T extends ControllerEvent> extends Ab
 
                 // 2. Clean up reader from checkpoint store
                 log.info("{} removing reader={} from checkpoint store", this.objectId, entry.getKey());
-                checkpointStore.removeReader(actorSystem.getProcess(), readerGroup.getGroupName(), entry.getKey());
+                checkpointStore.removeReader(process, readerGroup.getGroupName(), entry.getKey());
             }
 
             // finally, remove reader group from checkpoint store
